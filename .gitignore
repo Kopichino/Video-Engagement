@@ -1,0 +1,37 @@
+# Ignore the raw datasets and zip files
+OUC-CGE-dataset/
+Ver4-20260630T020728Z-3-005/
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Ignore virtual environments
+**/ouc_env/
+**/venv/
+**/.venv/
+
+# Ignore checkpoints, logs, and generated splits
+**/work_dirs/
+**/splits/
+**/*.pyth
+**/*.pth
+**/*.checkpoint
+
+# Ignore Python caches
+**/__pycache__/
+**/*.py[cod]
+
+# IDE settings
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db

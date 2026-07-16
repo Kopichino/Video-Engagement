@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+ouc_env/
+
+# IDE settings
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Video training directories
+work_dirs/
+splits/
+
+# Large files
+*.mp4
+*.avi
+*.zip
+*.tar.gz
+*.tar
+*.rar
+*.7z
+*.pyth
+*.pth
+*.checkpoint
+
+# OS-specific files
+.DS_Store
+Thumbs.db
