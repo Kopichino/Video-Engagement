@@ -1,0 +1,35 @@
+{
+  "primary_3class": {
+    "display_names": {
+      "0": "Low",
+      "1": "Mid",
+      "2": "High"
+    },
+    "mappings": {
+      "low": 0,
+      "disengagement": 0,
+      "mid": 1,
+      "normal": 1,
+      "high": 2,
+      "engagement": 2,
+      "very engagement": 2,
+      "very Engagement": 2
+    }
+  },
+  "binary_2class": {
+    "display_names": {
+      "0": "Not Engaged",
+      "1": "Engaged"
+    },
+    "mappings": {
+      "low": 0,
+      "disengagement": 0,
+      "mid": 0,
+      "normal": 0,
+      "high": 1,
+      "engagement": 1,
+      "very engagement": 1,
+      "very Engagement": 1
+    }
+  }
+}

@@ -47,7 +47,7 @@ NUM_FOLDS = 5
 
 # Set to None for a time-based random seed (different every run),
 # or set to a fixed integer (e.g. 42) for reproducibility.
-RANDOM_SEED = None
+RANDOM_SEED = 37247
 
 
 def collect_all_mp4(root_dir):
@@ -61,12 +61,40 @@ def collect_all_mp4(root_dir):
 
 
 def check_video_readable(video_path):
-    """Return True if OpenCV can read at least one frame from the video."""
+    """
+    Return True if OpenCV can read frames at multiple points throughout the video.
+    This helps detect truncated or corrupted files that fail mid-stream or at the end.
+    """
     import cv2
-    cap = cv2.VideoCapture(video_path)
-    ret, _ = cap.read()
-    cap.release()
-    return ret
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            cap.release()
+            return False
+        
+        # Get frame count
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if frame_count <= 0:
+            cap.release()
+            return False
+
+        # Check key frames across the duration (e.g. 0%, 25%, 50%, 75%, 95%)
+        check_points = [0, int(frame_count * 0.25), int(frame_count * 0.50), int(frame_count * 0.75), max(0, frame_count - 5)]
+        
+        # Deduplicate and sort check points
+        check_points = sorted(list(set(check_points)))
+        
+        for pt in check_points:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, pt)
+            ret, _ = cap.read()
+            if not ret:
+                cap.release()
+                return False
+                
+        cap.release()
+        return True
+    except Exception:
+        return False
 
 
 def scan_and_verify_videos():

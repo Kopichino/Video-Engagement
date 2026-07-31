@@ -1,0 +1,211 @@
+# Research Plan: Cross-Dataset Video Engagement Analysis
+
+## Your Current Situation (What You Have)
+
+| Asset | Details |
+|-------|---------|
+| **OUC-CGE Dataset** | 7,439 MP4 video clips (10s each, 30fps, ~1092×614). 3 classes: **High** (2,345), **Mid** (2,053), **Low** (3,041). Group-level classroom engagement. |
+| **COLER Dataset** | 18,546 files (PNG frames + skeleton CSVs + JPG emotion crops). 4 classes: **Very Engaged**, **Engaged**, **Normal**, **Disengaged**. Individual-level student engagement. |
+| **OUC-CGE Model** | SLOW 8×8 R50 (SlowFast framework). Already ran 5-fold × 1 epoch each. Results: **51.56% avg accuracy** (basically random — only 1 epoch of training). |
+| **EDA Notebooks** | Complete EDA for both datasets ([OUC_CGE_EDA.ipynb](file:///e:/Video_Engagement/OUC_CGE_EDA.ipynb), [COLER_EDA.ipynb](file:///e:/Video_Engagement/COLER_EDA.ipynb)). |
+| **Hardware** | RTX 4060 Laptop GPU (8GB VRAM). ~15–30 min per epoch per fold on OUC-CGE. |
+
+---
+
+## Can You Do a 2-Dataset Combined Study?
+
+**Yes, absolutely — but with important nuances.** Here is the honest assessment:
+
+### What Makes This a Valid Research Direction
+
+Your professor's idea of training on one dataset and validating/testing on the other is called **cross-dataset generalization** or **domain transfer evaluation**. This is a legitimate and publishable research contribution because:
+
+1. It tests whether engagement recognition models learn *generalizable* features vs. *dataset-specific* shortcuts.
+2. No existing paper has done OUC-CGE ↔ COLER cross-evaluation (because COLER is brand new).
+3. It directly addresses the real-world deployment question: *"Can a model trained in Chinese classrooms work in Vietnamese classrooms?"*
+
+### The Key Challenge: Label Alignment
+
+The two datasets use **different engagement taxonomies**:
+
+| OUC-CGE (Group-Level) | COLER (Individual-Level) |
+|------------------------|--------------------------|
+| High | Very Engaged |
+| Mid | Engaged |
+| Low | Normal |
+| — | Disengaged |
+
+> [!IMPORTANT]
+> **OUC-CGE has 3 classes. COLER has 4 classes. They measure different things (group vs. individual). Direct cross-dataset testing requires a label mapping strategy.**
+
+There are two clean ways to handle this:
+
+**Option A — Collapse to 3 classes (Recommended for your timeline):**
+- COLER: Merge "Very Engaged" + "Engaged" → **High**, "Normal" → **Mid**, "Disengaged" → **Low**
+- Now both datasets share the same 3-class taxonomy.
+- Justification: This follows the ordinal engagement scale (High/Mid/Low) which is standard in the literature.
+
+**Option B — Collapse to 2 classes (Binary):**
+- Both datasets: "Engaged" vs. "Not Engaged"
+- OUC-CGE: High → Engaged, Mid+Low → Not Engaged
+- COLER: VeryEngaged+Engaged → Engaged, Normal+Disengaged → Not Engaged
+
+### The Second Challenge: Data Modality
+
+| Property | OUC-CGE | COLER |
+|----------|---------|-------|
+| **Input format** | Raw MP4 video clips | Pre-extracted PNG frames + skeleton CSVs + emotion crops |
+| **Granularity** | Whole classroom (group) | Individual student (cropped) |
+| **Resolution** | ~1092×614 | Varies (cropped regions) |
+| **Temporal** | 10s clips, 30fps | 5s clips, 15 sampled frames |
+
+> [!WARNING]
+> **You cannot directly feed COLER's frame images into the SlowFast video model.** SlowFast expects MP4 video files, but COLER provides individual PNG frames. You would need to either: (a) reconstruct video clips from COLER frames, or (b) use a different model architecture that works on both.
+
+---
+
+## Recommended Research Strategy
+
+Given your **RTX 4060**, your **timeline (results by tomorrow)**, and the **cross-dataset goal**, here is the phased plan:
+
+---
+
+### Phase 1: Show Immediate Progress to Your Professor (TODAY — Next 6 Hours)
+
+**Goal: Start the OUC-CGE 5-fold training running overnight and prepare a research direction document.**
+
+Your current 5-fold results (51.56% accuracy) are meaningless because you only trained for **1 epoch**. The model hasn't learned anything yet. The original paper reports **97.8% accuracy** after 50 epochs.
+
+#### Action 1A: Start OUC-CGE Training Right Now (35 epochs)
+
+Delete old 1-epoch checkpoints and start fresh training. This will run overnight (~30 hours total).
+
+```powershell
+# Delete old 1-epoch checkpoints (they're useless)
+Remove-Item -Path "E:\Video_Engagement\OUC-CGE\work_dirs\fold_*" -Recurse -Force
+
+# Start training with low priority so you can keep using your laptop
+Start-Process -FilePath "E:\Video_Engagement\OUC-CGE\ouc_env\Scripts\python.exe" `
+  -ArgumentList "E:\Video_Engagement\OUC-CGE\run_5fold.py --max-epochs 35 --eval-period 5 --checkpoint-period 5" `
+  -WorkingDirectory "E:\Video_Engagement\OUC-CGE" `
+  -PriorityClass BelowNormal -NoNewWindow
+```
+
+> [!TIP]
+> **While training runs overnight, you work on Phase 1B below.** By tomorrow morning you should have at least Fold 0 fully trained (35 epochs ≈ 8–10 hours with FP16).
+
+#### Action 1B: Prepare a Research Direction Document for Your Professor
+
+Present these findings to your professor tomorrow:
+
+**Slide 1: "What We Have"**
+- Two complementary datasets: OUC-CGE (group-level, videos) and COLER (individual-level, frames+skeletons)
+- Completed EDA on both datasets
+- OUC-CGE training pipeline is operational and currently training
+
+**Slide 2: "Proposed Research Contributions"**
+
+1. **Contribution 1 — Baseline Reproduction**: Reproduce the OUC-CGE paper's SLOW R50 results with 5-fold cross-validation (they reported 97.8% on train/val/test split; our 5-fold CV will give a more rigorous estimate).
+
+2. **Contribution 2 — Cross-Dataset Transfer Study**: Train a shared-backbone model on OUC-CGE and evaluate on COLER (and vice versa) to measure generalization of engagement features across:
+   - Different countries (China vs. Vietnam)
+   - Different granularities (group vs. individual)
+   - Different classroom layouts
+
+3. **Contribution 3 — Unified Engagement Model**: Fine-tune a single model on both datasets simultaneously using a shared feature extractor with dataset-specific classification heads.
+
+**Slide 3: "Timeline"**
+- Week 1: Complete OUC-CGE 5-fold baseline (running now)
+- Week 2: Build unified data pipeline, implement label mapping
+- Week 3: Cross-dataset experiments
+- Week 4: Write up results
+
+---
+
+### Phase 2: Complete OUC-CGE Baseline (This Week)
+
+Once training finishes, run consolidation:
+
+```powershell
+& "E:\Video_Engagement\OUC-CGE\ouc_env\Scripts\python.exe" `
+  "E:\Video_Engagement\OUC-CGE\consolidate_metrics.py"
+```
+
+**Expected results**: With 35 epochs, you should see accuracy in the 85–95% range (the original paper got 97.8% with 50 epochs on a simpler train/val/test split).
+
+If accuracy is still below 80%, the issue is likely:
+- The warmup schedule (34 epochs warmup is very long for 35 total epochs — consider reducing `WARMUP_EPOCHS` to 5)
+- Class imbalance (Low class has 3,041 samples vs. Mid's 2,053)
+
+---
+
+### Phase 3: Cross-Dataset Experiments (Next 2 Weeks)
+
+Once the OUC-CGE baseline is solid, implement the cross-dataset study:
+
+#### Experiment 3A: Frame-Level Transfer (Most Feasible)
+
+Instead of using the SlowFast video model (which needs MP4s), switch to an **image-based model** that works on both datasets:
+
+1. **Extract key frames from OUC-CGE videos** (sample 1 frame per clip, or 3 frames at start/mid/end)
+2. **Use COLER's existing frames directly**
+3. **Train a ResNet-50 or ViT image classifier** on frames from Dataset A, test on frames from Dataset B
+
+This is the fastest path to cross-dataset results.
+
+#### Experiment 3B: Video-Level Transfer (More Work)
+
+1. **Reconstruct COLER clips**: Stitch the 15 sampled PNG frames per sample back into short video clips
+2. **Train SlowFast on OUC-CGE**, test on reconstructed COLER clips
+3. **Train SlowFast on COLER clips**, test on OUC-CGE
+
+#### Experiment 3C: Multi-Dataset Joint Training
+
+1. Create a combined dataloader that mixes samples from both datasets
+2. Use a shared backbone with two classification heads (3-class for OUC-CGE, 4-class for COLER)
+3. Alternate batches between datasets during training
+4. Report performance on each dataset's test set
+
+---
+
+## What to Tell Your Professor Tomorrow
+
+> [!IMPORTANT]
+> **Key talking points for your meeting:**
+
+1. **"I have the full pipeline operational."** Show the EDA notebooks, the 5-fold training config, and the running training process.
+
+2. **"Here are the preliminary 1-epoch results — they confirm the pipeline works but needs more training."** Show the 51.56% accuracy from the 1-epoch run and explain that the model needs 35–50 epochs.
+
+3. **"I've identified the research gap."** No one has done cross-dataset evaluation between OUC-CGE and COLER. This is a novel contribution.
+
+4. **"Here is my proposed label mapping."** Show the 3-class mapping table above. Ask for their feedback.
+
+5. **"Training is running right now."** By your next meeting, you'll have full 35-epoch results.
+
+6. **"The cross-dataset study is feasible but has a modality gap."** Explain that OUC-CGE uses videos and COLER uses frames, and propose the frame-level transfer approach as the fastest path.
+
+---
+
+## Immediate Next Steps Checklist
+
+- [ ] **RIGHT NOW**: Start OUC-CGE 35-epoch training (runs overnight)
+- [ ] **Tonight**: Prepare a 3–5 slide summary for your professor (use the talking points above)
+- [ ] **Tomorrow meeting**: Present findings, get feedback on label mapping, confirm research direction
+- [ ] **This week**: Collect OUC-CGE 35-epoch results, investigate warmup epoch issue
+- [ ] **Next week**: Begin implementing cross-dataset frame-level pipeline
+
+---
+
+## Appendix: Warmup Schedule Concern
+
+> [!WARNING]
+> Your current config has `WARMUP_EPOCHS: 34.0` out of `MAX_EPOCH: 35`. This means the learning rate stays at the warmup value (0.01) for almost the entire training, and the cosine schedule only kicks in for the final 1 epoch. This will severely limit learning. **Consider reducing `WARMUP_EPOCHS` to 5.0** for the 35-epoch training run.
+
+```yaml
+# In 5fold_SLOW_8x8_R50.yaml, change:
+SOLVER:
+  WARMUP_EPOCHS: 5.0   # was 34.0 — that's designed for 200-epoch Kinetics training
+```
+
+This single change could be the difference between 60% and 90% accuracy.
