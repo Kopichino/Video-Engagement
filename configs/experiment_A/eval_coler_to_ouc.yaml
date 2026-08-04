@@ -1,0 +1,24 @@
+# Setting 4: Train on COLER -> Evaluate directly on OUC-CGE (No fine-tuning)
+experiment:
+  name: "exp_a_eval_coler_to_ouc"
+  description: "Experiment A Setting 4: Direct Transfer - Trained COLER Model evaluated on OUC-CGE Test Set"
+  output_dir: "outputs/exp_a_eval_coler_to_ouc"
+  checkpoint_to_load: "outputs/exp_a_train_coler/checkpoints/best_model.pth"
+  seed: 42
+
+dataset:
+  manifest_path: "data/manifests/unified_frame_dataset.csv"
+  target_dataset: "OUC-CGE" # Evaluate on OUC-CGE
+  label_type: "primary"
+  fold: 0
+  batch_size: 32
+  num_workers: 0
+  pin_memory: true
+
+model:
+  architecture: "resnet50"
+  num_classes: 3
+  dropout_rate: 0.5
+
+evaluation:
+  eval_batch_size: 32

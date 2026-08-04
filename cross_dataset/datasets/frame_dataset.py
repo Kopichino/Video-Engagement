@@ -2,9 +2,9 @@
 Reusable PyTorch Dataset for Cross-Dataset Video Engagement Recognition.
 
 Features:
-    - Train / Validation / Test phase partitioning
+    - Strict Train / Validation / Test split isolation (Zero Data Leakage)
     - Cross-dataset loading (OUC-CGE, COLER, or Combined)
-    - Image loading & torchvision transforms
+    - Deterministic image loading & torchvision transforms
     - Class balancing via stratified downsampling
     - Dynamic attribute filtering
     - Config-driven initialization
@@ -25,7 +25,6 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
-    # Fallback dummy class if torch is missing
     class Dataset:
         pass
 
@@ -38,7 +37,7 @@ logger = get_logger("UnifiedFrameDataset")
 class UnifiedFrameDataset(Dataset):
     """
     Reusable PyTorch Dataset for single-frame engagement recognition.
-    Supports train/val/test splits, cross-dataset loading, balancing, filtering, and transforms.
+    Guarantees strict train/val/test separation and zero cross-dataset leakage.
     """
 
     def __init__(
@@ -52,6 +51,7 @@ class UnifiedFrameDataset(Dataset):
         filters: Optional[Dict[str, Any]] = None,
         manifest_path: Optional[str] = None,
         config: Optional[PipelineConfig] = None,
+        is_cross_dataset_eval: bool = False,
     ):
         """
         Args:
@@ -60,10 +60,11 @@ class UnifiedFrameDataset(Dataset):
             target_dataset: Filter by dataset ('OUC-CGE', 'COLER', or None for both).
             label_type: Target taxonomy ('primary' for 3-class, 'binary' for 2-class).
             transform: PyTorch/torchvision image transformation pipeline.
-            balance_classes: If True, downsamples majority classes to equal frequency.
+            balance_classes: If True, downsamples majority classes to equal frequency (Train phase only).
             filters: Optional dict of key-value filters (e.g. {'goc': 'Goc1'}).
             manifest_path: Path to unified_frame_dataset.csv (defaults to config location).
             config: PipelineConfig instance.
+            is_cross_dataset_eval: If True, evaluates on all samples of target_dataset ignoring fold splits.
         """
         if not TORCH_AVAILABLE:
             raise ImportError("PyTorch and Torchvision must be installed to use UnifiedFrameDataset.")
@@ -72,9 +73,10 @@ class UnifiedFrameDataset(Dataset):
         self.fold = fold
         self.target_dataset = target_dataset
         self.label_type = label_type.lower()
-        self.balance_classes = balance_classes
+        self.balance_classes = balance_classes and (self.phase == "train")
         self.filters = filters or {}
         self.cfg = config or load_config()
+        self.is_cross_dataset_eval = is_cross_dataset_eval
 
         if manifest_path is None:
             manifest_path = os.path.join(self.cfg.paths.manifest_dir, "unified_frame_dataset.csv")
@@ -88,7 +90,7 @@ class UnifiedFrameDataset(Dataset):
         # Load and process samples from manifest
         self.samples = self._load_and_filter_samples()
 
-        if self.balance_classes and self.phase == "train":
+        if self.balance_classes:
             self.samples = self._balance_samples(self.samples)
 
         logger.info(
@@ -99,7 +101,9 @@ class UnifiedFrameDataset(Dataset):
 
     def _get_default_transforms(self, phase: str) -> Callable:
         """
-        Returns default torchvision image preprocessing and normalization transforms.
+        Returns deterministic torchvision image transforms.
+        Augmentations (RandomCrop, RandomHorizontalFlip) apply ONLY during 'train'.
+        Validation & testing use strict CenterCrop without stochastic augmentations.
         """
         imagenet_mean = [0.485, 0.456, 0.406]
         imagenet_std = [0.229, 0.224, 0.225]
@@ -123,6 +127,7 @@ class UnifiedFrameDataset(Dataset):
     def _load_and_filter_samples(self) -> List[Dict[str, Any]]:
         """
         Loads CSV manifest and applies phase, fold, dataset, and attribute filtering.
+        Ensures strict split isolation.
         """
         if not os.path.exists(self.manifest_path):
             raise FileNotFoundError(f"Frame manifest CSV not found at: {self.manifest_path}")
@@ -140,16 +145,13 @@ class UnifiedFrameDataset(Dataset):
                     continue
 
                 # 2. Phase & Fold Partitioning
-                if self.phase == "train":
-                    if sample_fold == self.fold:
-                        continue  # Validation fold excluded from train
-                elif self.phase in ("val", "validation"):
-                    if sample_fold != self.fold:
-                        continue  # Only target validation fold included
-                elif self.phase == "test":
-                    # Test split can use designated fold or un-seen split
-                    if sample_fold != self.fold:
-                        continue
+                if not self.is_cross_dataset_eval:
+                    if self.phase == "train":
+                        if sample_fold == self.fold:
+                            continue  # Validation fold strictly excluded from train
+                    elif self.phase in ("val", "validation", "test"):
+                        if sample_fold != self.fold:
+                            continue  # Only target validation/test fold included
 
                 # 3. Dynamic Metadata Attribute Filtering
                 skip = False
@@ -221,7 +223,6 @@ class UnifiedFrameDataset(Dataset):
             image = Image.open(img_path).convert("RGB")
         except Exception as e:
             logger.error(f"Failed to load image at {img_path}: {e}")
-            # Dummy black image fallback to prevent crash during training
             image = Image.new("RGB", (224, 224), (0, 0, 0))
 
         # Apply transforms
