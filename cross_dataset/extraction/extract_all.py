@@ -157,4 +157,4 @@ def run_extraction_pipeline(
 
 
 if __name__ == "__main__":
-    run_extraction_pipeline(num_frames=3, sampling_mode="uniform", max_samples=10)
+    run_extraction_pipeline(num_frames=3, sampling_mode="uniform", max_samples=0)

@@ -1,0 +1,4 @@
+dataset,clip_id,frame_id,image_path,target,prediction,probabilities
+OUC-CGE,ouc_high_00006,0,data/extracted_frames/OUC-CGE/ouc_high_00006/frame_0000.png,2,1,"[0.3247038722038269, 0.37240704894065857, 0.3028891086578369]"
+OUC-CGE,ouc_high_00006,149,data/extracted_frames/OUC-CGE/ouc_high_00006/frame_0149.png,2,1,"[0.31545600295066833, 0.39058056473731995, 0.2939634919166565]"
+OUC-CGE,ouc_high_00006,298,data/extracted_frames/OUC-CGE/ouc_high_00006/frame_0298.png,2,1,"[0.33974790573120117, 0.3599339723587036, 0.3003181219100952]"

@@ -35,3 +35,5 @@ Ver4-20260630T020728Z-3-005/
 # OS files
 .DS_Store
 Thumbs.db
+
+data/extracted_frames

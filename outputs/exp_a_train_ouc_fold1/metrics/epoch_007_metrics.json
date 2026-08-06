@@ -1,0 +1,97 @@
+{
+  "epoch": 7,
+  "train": {
+    "accuracy": 1.0,
+    "macro_f1": 0.3333,
+    "macro_precision": 0.3333,
+    "macro_recall": 0.3333,
+    "balanced_accuracy": 0.3333,
+    "qwk": 1.0,
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        24
+      ]
+    ],
+    "class_accuracy": {
+      "Low": 0.0,
+      "Mid": 0.0,
+      "High": 1.0
+    },
+    "per_class_f1": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "per_class_precision": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "per_class_recall": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "loss": 0.2946,
+    "epoch_time_sec": 4.93
+  },
+  "val": {
+    "accuracy": 0.0,
+    "macro_f1": 0.0,
+    "macro_precision": 0.0,
+    "macro_recall": 0.0,
+    "balanced_accuracy": 0.0,
+    "qwk": 0.0,
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        4,
+        0
+      ]
+    ],
+    "class_accuracy": {
+      "Low": 0.0,
+      "Mid": 0.0,
+      "High": 0.0
+    },
+    "per_class_f1": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "per_class_precision": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "per_class_recall": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "loss": 1.1533
+  },
+  "lr": 7.959536998847744e-05
+}
