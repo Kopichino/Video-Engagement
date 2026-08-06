@@ -1,4 +1,4 @@
-# Ignore the raw datasets and zip files
+# Ignore raw datasets and archive files
 OUC-CGE-dataset/
 Ver4-20260630T020728Z-3-005/
 *.zip
@@ -12,12 +12,19 @@ Ver4-20260630T020728Z-3-005/
 **/venv/
 **/.venv/
 
+# Ignore extracted frame images and large generated outputs
+data/extracted_frames/
+data/extracted_frames/**
+outputs/
+outputs/**
+
 # Ignore checkpoints, logs, and generated splits
 **/work_dirs/
 **/splits/
 **/*.pyth
 **/*.pth
 **/*.checkpoint
+**/*.tfevents*
 
 # Ignore Python caches
 **/__pycache__/
@@ -35,5 +42,3 @@ Ver4-20260630T020728Z-3-005/
 # OS files
 .DS_Store
 Thumbs.db
-
-data/extracted_frames
