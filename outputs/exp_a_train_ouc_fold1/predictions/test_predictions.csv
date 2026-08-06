@@ -1,7 +1,0 @@
-dataset,clip_id,frame_id,image_path,target,prediction,probabilities
-OUC-CGE,ouc_high_00001,0,data/extracted_frames/OUC-CGE/ouc_high_00001/frame_0000.png,2,1,"[0.3148231506347656, 0.39501506090164185, 0.29016175866127014]"
-OUC-CGE,ouc_high_00001,150,data/extracted_frames/OUC-CGE/ouc_high_00001/frame_0150.png,2,1,"[0.3386932909488678, 0.363496869802475, 0.29780974984169006]"
-OUC-CGE,ouc_high_00001,299,data/extracted_frames/OUC-CGE/ouc_high_00001/frame_0299.png,2,1,"[0.322136789560318, 0.37768489122390747, 0.30017828941345215]"
-OUC-CGE,ouc_high_00010,0,data/extracted_frames/OUC-CGE/ouc_high_00010/frame_0000.png,2,1,"[0.3435926139354706, 0.3524540364742279, 0.30395326018333435]"
-OUC-CGE,ouc_high_00010,148,data/extracted_frames/OUC-CGE/ouc_high_00010/frame_0148.png,2,1,"[0.32997456192970276, 0.36662644147872925, 0.3033990263938904]"
-OUC-CGE,ouc_high_00010,297,data/extracted_frames/OUC-CGE/ouc_high_00010/frame_0297.png,2,1,"[0.3258562386035919, 0.35790568590164185, 0.31623804569244385]"

@@ -178,12 +178,21 @@ class Trainer:
         # Auto-Resume Checkpoint
         self.start_epoch = 1
         if self.train_cfg.get("auto_resume", True):
-            self.start_epoch, _ = self.checkpoint_mgr.auto_resume_if_available(
+            resumed_epoch, is_resumed = self.checkpoint_mgr.auto_resume_if_available(
                 model=self.model,
                 optimizer=self.optimizer,
                 scheduler=self.scheduler,
                 scaler=self.scaler,
             )
+            if is_resumed:
+                if resumed_epoch > self.total_epochs:
+                    logger.info(
+                        f"Old checkpoint completed {resumed_epoch - 1} epochs (>= total_epochs {self.total_epochs}). "
+                        f"Resetting start_epoch to 1 for clean training."
+                    )
+                    self.start_epoch = 1
+                else:
+                    self.start_epoch = resumed_epoch
 
     def _set_deterministic_seed(self, seed: int):
         """Sets deterministic random seeds across Python, NumPy, and PyTorch."""

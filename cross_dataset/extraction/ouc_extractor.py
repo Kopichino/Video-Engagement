@@ -1,5 +1,7 @@
 """
 Frame Extractor for OUC-CGE Video Dataset.
+
+Optimized with dynamic resolution scaling (256x256) to save 99% disk space.
 """
 
 import os
@@ -20,19 +22,22 @@ logger = get_logger("OUC_Frame_Extractor")
 class OUCCGEFrameExtractor:
     """
     Extracts frames from OUC-CGE MP4 video clips according to configurable sampling strategies.
+    Resizes extracted frames to 256x256 to ensure low disk space consumption (~20KB per frame).
     """
 
-    def __init__(self, output_base_dir: Optional[str] = None):
+    def __init__(self, output_base_dir: Optional[str] = None, target_size: Optional[tuple] = (256, 256)):
         """
         Args:
             output_base_dir: Directory where extracted frame PNGs will be saved.
                              If None, defaults to 'data/extracted_frames/OUC-CGE'.
+            target_size: (width, height) tuple to resize frames before saving.
         """
         if output_base_dir is None:
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             output_base_dir = os.path.join(project_root, "data", "extracted_frames", "OUC-CGE")
 
         self.output_base_dir = os.path.abspath(output_base_dir)
+        self.target_size = target_size
 
     def extract_from_video(
         self,
@@ -116,6 +121,9 @@ class OUCCGEFrameExtractor:
                     out_path = os.path.join(sample_out_dir, out_name)
 
                     if save_to_disk:
+                        # Resize frame to target size (256x256) to save 99% disk space
+                        if self.target_size is not None:
+                            frame = cv2.resize(frame, self.target_size, interpolation=cv2.INTER_AREA)
                         cv2.imwrite(out_path, frame)
 
                     extracted_paths.append(out_path)

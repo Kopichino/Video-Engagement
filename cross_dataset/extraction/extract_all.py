@@ -9,6 +9,7 @@ import csv
 import json
 import os
 import sys
+import time
 from typing import List, Dict, Any
 
 from cross_dataset.config.base_config import load_config
@@ -25,6 +26,7 @@ def run_extraction_pipeline(
     sampling_mode: str = "uniform",
     max_samples: int = 0,
     config_path: str = None,
+    log_interval: int = 250,
 ) -> str:
     """
     Executes frame extraction and sequence validation across datasets.
@@ -34,6 +36,7 @@ def run_extraction_pipeline(
         sampling_mode: Sampling mode ('single', 'three', 'uniform', 'center', 'random').
         max_samples: Maximum samples per dataset to process (0 = all).
         config_path: Optional path to JSON config.
+        log_interval: Interval count for progress logging to stdout.
 
     Returns:
         str: Absolute path to the generated extracted_frames_manifest.csv.
@@ -62,13 +65,29 @@ def run_extraction_pipeline(
         reader = csv.DictReader(f)
         samples = list(reader)
 
-    logger.info(f"Total samples in manifest: {len(samples)}")
+    total_samples = len(samples)
+    logger.info(f"Total samples in manifest: {total_samples}")
     logger.info(f"Configured OUC-CGE Sampling: num_frames={num_frames}, mode={mode_enum.value}")
 
     ouc_count = 0
     coler_count = 0
+    start_time = time.time()
 
-    for sample in samples:
+    fieldnames = [
+        "sample_id",
+        "dataset_name",
+        "status",
+        "total_frames",
+        "extracted_count",
+        "sampling_mode",
+        "frame_indices",
+        "frame_paths",
+        "missing_frames_count",
+        "label_3class",
+        "split_fold",
+    ]
+
+    for idx, sample in enumerate(samples, 1):
         dataset_name = sample["dataset_name"]
         sample_id = sample["sample_id"]
 
@@ -130,28 +149,34 @@ def run_extraction_pipeline(
             extracted_records.append(record)
             coler_count += 1
 
-    # Write output manifest
-    fieldnames = [
-        "sample_id",
-        "dataset_name",
-        "status",
-        "total_frames",
-        "extracted_count",
-        "sampling_mode",
-        "frame_indices",
-        "frame_paths",
-        "missing_frames_count",
-        "label_3class",
-        "split_fold",
-    ]
+        # Live Terminal Progress Logging
+        if idx % log_interval == 0 or idx == total_samples:
+            elapsed = time.time() - start_time
+            rate = idx / elapsed if elapsed > 0 else 0
+            logger.info(
+                f"Progress: [{idx:04d}/{total_samples:04d}] ({idx/total_samples*100:.1f}%) | "
+                f"OUC-CGE: {ouc_count} | COLER: {coler_count} | Speed: {rate:.1f} samples/sec"
+            )
 
+            # Periodically write manifest checkpoint
+            with open(out_manifest_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(extracted_records)
+
+    # Final Manifest Write
     with open(out_manifest_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(extracted_records)
 
-    logger.info(f"Frame Extraction Metadata Manifest successfully generated at: {out_manifest_path}")
-    logger.info(f"Processed: OUC-CGE = {ouc_count}, COLER = {coler_count}")
+    elapsed_total = time.time() - start_time
+    logger.info("==================================================")
+    logger.info(" FRAME EXTRACTION PIPELINE COMPLETE!             ")
+    logger.info(f" Total Processed: OUC-CGE = {ouc_count}, COLER = {coler_count}")
+    logger.info(f" Total Time Elapsed: {elapsed_total:.2f} seconds")
+    logger.info(f" Manifest Saved To: {out_manifest_path}")
+    logger.info("==================================================")
 
     return out_manifest_path
 
