@@ -1,5 +1,5 @@
 """
-Evaluator Module for Experiment A Framework.
+Evaluator Module for Experiment A and Experiment B Framework.
 
 Performs single-pass evaluation over validation, testing, and direct cross-dataset
 transfer splits without gradient computation.
@@ -54,7 +54,7 @@ class Evaluator:
         if isinstance(container, torch.Tensor):
             return container[index].item()
         elif isinstance(container, (list, tuple)):
-            return container[index]
+            return container[index] if index < len(container) else "UNKNOWN"
         else:
             return container
 
@@ -113,13 +113,35 @@ class Evaluator:
             y_pred_list.extend(preds_np)
             y_prob_list.append(probs_np)
 
-            # Record per-sample prediction details
+            # Record per-sample prediction details (handles dict, list, tuple, and scalar info)
             for i in range(batch_size):
+                if isinstance(info, dict):
+                    ds_val = self._extract_info_item(info.get("dataset", "UNKNOWN"), i)
+                    clip_val = self._extract_info_item(info.get("clip_id", "UNKNOWN"), i)
+                    frame_val = self._extract_info_item(info.get("frame_id", -1), i)
+                    path_val = self._extract_info_item(info.get("image_path", "UNKNOWN"), i)
+                elif isinstance(info, (list, tuple)):
+                    sample_item = info[i] if i < len(info) else "UNKNOWN"
+                    ds_val = "DATASET"
+                    clip_val = str(sample_item)
+                    frame_val = -1
+                    path_val = str(sample_item)
+                else:
+                    ds_val = "DATASET"
+                    clip_val = str(info)
+                    frame_val = -1
+                    path_val = str(info)
+
+                try:
+                    f_id = int(frame_val)
+                except (ValueError, TypeError):
+                    f_id = -1
+
                 rec = {
-                    "dataset": str(self._extract_info_item(info.get("dataset"), i)),
-                    "clip_id": str(self._extract_info_item(info.get("clip_id"), i)),
-                    "frame_id": int(self._extract_info_item(info.get("frame_id"), i)),
-                    "image_path": str(self._extract_info_item(info.get("image_path"), i)),
+                    "dataset": str(ds_val),
+                    "clip_id": str(clip_val),
+                    "frame_id": f_id,
+                    "image_path": str(path_val),
                     "target": int(targets_np[i]),
                     "prediction": int(preds_np[i]),
                     "probabilities": probs_np[i].tolist(),

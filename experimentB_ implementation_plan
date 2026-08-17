@@ -1,0 +1,101 @@
+# Implementation Plan: Experiment B (3D Video Sequence Modeling & Temporal Transfer)
+
+Experiment A established that static 2D spatial models (ResNet-50) achieve near-perfect in-domain performance (~99% on OUC-CGE, ~96% on COLER) but experience a severe performance drop (down to 52% and 29%) when transferred cross-domain due to static spatial domain shift.
+
+**Experiment B** addresses the temporal dimension of video engagement recognition by transitioning from static keyframes to **3D spatiotemporal video sequence modeling**. We use 3D Convolutional Networks (such as `R(2+1)D-18` or `ResNet3D-18`) to model contiguous 16-frame temporal windows `[C, T, H, W] = [3, 16, 224, 224]` and evaluate whether temporal motion patterns reduce cross-dataset domain shift.
+
+---
+
+## 1. Experimental Settings Architecture
+
+Experiment B follows the same 4-setting experimental matrix as Experiment A, adapted for 3D spatiotemporal sequence inputs:
+
+| Setting ID | Experiment Description | Input Shape | Training Domain | Test Evaluation Domain | Primary Metric |
+|---|---|---|---|---|---|
+| **Setting 1** | In-Domain OUC-CGE 3D Model | `[3, 16, 224, 224]` | OUC-CGE | OUC-CGE (5-Fold CV) | Macro F1 & Accuracy |
+| **Setting 2** | In-Domain COLER 3D Model | `[3, 16, 224, 224]` | COLER | COLER (5-Fold CV) | Macro F1 & Accuracy |
+| **Setting 3** | Direct Temporal Transfer (OUC $\rightarrow$ COLER) | `[3, 16, 224, 224]` | OUC-CGE | COLER (Zero-Shot) | Transfer Macro F1 & QWK |
+| **Setting 4** | Reverse Temporal Transfer (COLER $\rightarrow$ OUC) | `[3, 16, 224, 224]` | COLER | OUC-CGE (Zero-Shot) | Transfer Macro F1 & QWK |
+
+---
+
+## 2. User Review Required
+
+> [!IMPORTANT]
+> **VRAM & Compute Considerations for 3D Convolutions**:
+> Processing 16-frame video tensors `[3, 16, 224, 224]` with 3D convolutions uses significantly more GPU memory than 2D single frames.
+> We recommend a **batch size of 8 or 16** with **Automatic Mixed Precision (AMP)** enabled to comfortably fit within your NVIDIA RTX 4060 GPU (8GB VRAM).
+
+> [!NOTE]
+> **3D Video Backbone Selection**:
+> We will use `torchvision.models.video.r2plus1d_18(weights='KINETICS400_V1')` as the primary 3D backbone. R(2+1)D factorizes 3D convolutions into separate 2D spatial and 1D temporal convolutions, yielding superior accuracy and efficiency for action/engagement recognition.
+
+---
+
+## 3. Proposed Changes & Codebase Modifications
+
+---
+
+### [Component 1: Dataset Loader]
+
+#### [NEW] [video_dataset.py](file:///e:/Video_Engagement/cross_dataset/datasets/video_dataset.py)
+Create `UnifiedVideoDataset` PyTorch `Dataset` class for 3D temporal sequence inputs:
+- Reads manifest containing clip/sequence directory paths.
+- Samples $T = 16$ contiguous or uniformly spaced frames per clip.
+- Applies 3D video transforms (`video_transforms` PyTorch pipeline): Resize to $256 \times 256$, center/random crop to $224 \times 224$, normalize to ImageNet / Kinetics-400 standards.
+- Returns 4D tensor `[3, 16, 224, 224]` and mapped 3-class target integer.
+
+---
+
+### [Component 2: Model & Factory Architecture]
+
+#### [MODIFY] [model_factory.py](file:///e:/Video_Engagement/cross_dataset/training/model_factory.py)
+Extend `build_model()` to instantiate 3D Video backbones:
+- Support `architecture: "r2plus1d_18"`, `architecture: "r3d_18"`, `architecture: "mc3_18"`.
+- Replace the final linear classification head `fc` / `heads` with a custom linear layer mapping to `num_classes = 3`.
+
+---
+
+### [Component 3: Dataset Factory & DataLoader Builder]
+
+#### [MODIFY] [dataset_factory.py](file:///e:/Video_Engagement/cross_dataset/training/dataset_factory.py)
+Extend `build_dataloaders()`:
+- Add support for `is_video_3d: True` flag in YAML configs.
+- Route dataset construction to `UnifiedVideoDataset` when `is_video_3d` is true.
+
+---
+
+### [Component 4: YAML Configurations]
+
+#### [NEW] [train_ouc_3d.yaml](file:///e:/Video_Engagement/configs/experiment_B/train_ouc_3d.yaml)
+Configuration for Setting 1 (OUC-CGE 3D In-Domain 5-Fold Training).
+
+#### [NEW] [train_coler_3d.yaml](file:///e:/Video_Engagement/configs/experiment_B/train_coler_3d.yaml)
+Configuration for Setting 2 (COLER 3D In-Domain 5-Fold Training).
+
+#### [NEW] [eval_ouc_to_coler_3d.yaml](file:///e:/Video_Engagement/configs/experiment_B/eval_ouc_to_coler_3d.yaml)
+Configuration for Setting 3 (Direct Transfer OUC 3D Model $\rightarrow$ COLER Test Set).
+
+#### [NEW] [eval_coler_to_ouc_3d.yaml](file:///e:/Video_Engagement/configs/experiment_B/eval_coler_to_ouc_3d.yaml)
+Configuration for Setting 4 (Reverse Direct Transfer COLER 3D Model $\rightarrow$ OUC Test Set).
+
+---
+
+### [Component 5: Automation Script]
+
+#### [NEW] [run_experiment_B.ps1](file:///e:/Video_Engagement/run_experiment_B.ps1)
+Master PowerShell script to automate Experiment B execution across all 4 settings and 5 cross-validation folds.
+
+---
+
+## 4. Verification Plan
+
+### Automated Verification
+1. **Unit Test Data Loader**: Test `UnifiedVideoDataset` output shapes `[3, 16, 224, 224]` and label mapping.
+2. **Model Forward Pass Audit**: Verify `R(2+1)D-18` forward pass on CUDA GPU with batch size 8.
+3. **Pipeline Integrity Check**: Run `python -m cross_dataset.validation.pipeline_validator` to confirm zero data leakage.
+
+### Benchmark Verification
+1. Execute **Setting 1** (OUC 3D 5-Fold CV) and **Setting 2** (COLER 3D 5-Fold CV).
+2. Execute **Setting 3** (OUC 3D $\rightarrow$ COLER Transfer) and **Setting 4** (COLER 3D $\rightarrow$ OUC Transfer).
+3. Generate **Experiment B Master Benchmark Report** and compare temporal transfer performance against Experiment A static 2D baselines.

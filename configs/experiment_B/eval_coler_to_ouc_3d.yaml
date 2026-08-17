@@ -1,0 +1,29 @@
+# Experiment B Setting 4: Reverse Direct Transfer (COLER 3D Model -> OUC-CGE Test Set)
+experiment:
+  name: "exp_b_eval_coler_to_ouc_3d"
+  description: "Experiment B Setting 4: Reverse Direct Transfer COLER 3D R(2+1)D-18 -> OUC-CGE Test Set"
+  output_dir: "outputs/exp_b_eval_coler_to_ouc_3d"
+  seed: 42
+
+dataset:
+  manifest_path: "data/manifests/unified_manifest.csv"
+  target_dataset: "OUC-CGE"
+  eval_target_dataset: "OUC-CGE"
+  label_type: "primary"
+  is_video_3d: true
+  num_frames: 16
+  img_size: 224
+  fold: 0
+  balance_classes: false
+  batch_size: 8
+  num_workers: 0
+  pin_memory: true
+
+model:
+  architecture: "r2plus1d_18"
+  pretrained: true
+  num_classes: 3
+  checkpoint_path: "outputs/exp_b_train_coler_3d/checkpoints/best_model.pth"
+
+evaluation:
+  eval_batch_size: 8
