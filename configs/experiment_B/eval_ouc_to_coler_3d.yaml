@@ -3,6 +3,7 @@ experiment:
   name: "exp_b_eval_ouc_to_coler_3d"
   description: "Experiment B Setting 3: Direct Transfer OUC 3D R(2+1)D-18 -> COLER Test Set"
   output_dir: "outputs/exp_b_eval_ouc_to_coler_3d"
+  checkpoint_to_load: "outputs/exp_b_train_ouc_3d/checkpoints/best_model.pth"
   seed: 42
 
 dataset:

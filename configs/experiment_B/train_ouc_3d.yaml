@@ -1,4 +1,5 @@
 # Experiment B Setting 1: Train 3D Model on OUC-CGE, Validate on OUC-CGE, Test on OUC-CGE
+# Configured with Hardware Safety Controls (VRAM < 3.5GB, num_workers=0) to prevent laptop freezes.
 experiment:
   name: "exp_b_train_ouc_3d"
   description: "Experiment B Setting 1: 3D R(2+1)D-18 Model on OUC-CGE (5-Fold CV)"
@@ -15,9 +16,10 @@ dataset:
   img_size: 224
   fold: 0
   balance_classes: true
-  batch_size: 8
+  batch_size: 4
   num_workers: 0
   pin_memory: false
+  use_ram_cache: false
 
 model:
   architecture: "r2plus1d_18"
@@ -30,7 +32,7 @@ training:
   epochs: 20
   use_amp: true
   gradient_clipping: 1.0
-  gradient_accumulation_steps: 2
+  gradient_accumulation_steps: 4
   auto_resume: true
   early_stopping:
     enabled: true
@@ -50,4 +52,4 @@ scheduler:
   eta_min: 0.000001
 
 evaluation:
-  eval_batch_size: 8
+  eval_batch_size: 4

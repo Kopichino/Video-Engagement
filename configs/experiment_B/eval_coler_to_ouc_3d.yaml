@@ -3,6 +3,7 @@ experiment:
   name: "exp_b_eval_coler_to_ouc_3d"
   description: "Experiment B Setting 4: Reverse Direct Transfer COLER 3D R(2+1)D-18 -> OUC-CGE Test Set"
   output_dir: "outputs/exp_b_eval_coler_to_ouc_3d"
+  checkpoint_to_load: "outputs/exp_b_train_coler_3d/checkpoints/best_model.pth"
   seed: 42
 
 dataset:

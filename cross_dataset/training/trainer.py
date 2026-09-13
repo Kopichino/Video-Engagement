@@ -10,6 +10,7 @@ Supports:
     - Full Metric Logging & Plot Generation
 """
 
+import gc
 import json
 import os
 import random
@@ -282,9 +283,13 @@ class Trainer:
         for epoch in range(self.start_epoch, self.total_epochs + 1):
             # 1. Train Epoch
             train_metrics = self.train_epoch(epoch)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             # 2. Validation Epoch
             val_metrics, _ = self.evaluator.evaluate(self.val_loader)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             # Get current learning rate
             current_lr = float(self.optimizer.param_groups[0]["lr"])
@@ -323,6 +328,11 @@ class Trainer:
                 metrics=val_metrics,
                 is_best=is_best,
             )
+
+            # Clean memory at epoch end
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             # 6. Early Stopping Check
             if self.early_stopping_enabled and self.early_stopper.check(val_score):

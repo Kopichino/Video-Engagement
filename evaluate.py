@@ -53,21 +53,28 @@ def main():
     model = build_model(model_cfg)
 
     # Load Trained Checkpoint
-    checkpoint_to_load = exp_cfg.get("checkpoint_to_load")
+    checkpoint_to_load = exp_cfg.get("checkpoint_to_load") or model_cfg.get("checkpoint_path")
     if not checkpoint_to_load or not os.path.exists(checkpoint_to_load):
         logger.warning(
             f"Checkpoint path '{checkpoint_to_load}' not found. "
             f"Attempting to search in default output directory..."
         )
-        if "eval_ouc" in exp_cfg["name"]:
-            checkpoint_to_load = "outputs/exp_a_train_ouc/checkpoints/best_model.pth"
+        is_3d = bool(ds_cfg.get("is_video_3d", False) or ds_cfg.get("is_3d", False) or "3d" in exp_cfg.get("name", ""))
+        if is_3d:
+            if "eval_ouc" in exp_cfg["name"]:
+                checkpoint_to_load = "outputs/exp_b_train_ouc_3d/checkpoints/best_model.pth"
+            else:
+                checkpoint_to_load = "outputs/exp_b_train_coler_3d/checkpoints/best_model.pth"
         else:
-            checkpoint_to_load = "outputs/exp_a_train_coler/checkpoints/best_model.pth"
+            if "eval_ouc" in exp_cfg["name"]:
+                checkpoint_to_load = "outputs/exp_a_train_ouc/checkpoints/best_model.pth"
+            else:
+                checkpoint_to_load = "outputs/exp_a_train_coler/checkpoints/best_model.pth"
 
     if not os.path.exists(checkpoint_to_load):
         logger.error(
             f"Cannot perform evaluation! Checkpoint file '{checkpoint_to_load}' does not exist. "
-            f"Train the model first using train.py --config configs/experiment_A/train_ouc.yaml"
+            f"Train the model first using train.py"
         )
         sys.exit(1)
 
@@ -98,13 +105,16 @@ def main():
         filename="transfer_confusion_matrix.png",
     )
 
-    if "fpr" in test_metrics and "tpr" in test_metrics if 'test_metrics' in locals() else "fpr" in metrics and "tpr" in metrics:
-        exp_logger.plot_roc_curve(
-            fpr=metrics["fpr"],
-            tpr=metrics["tpr"],
-            roc_auc=metrics.get("roc_auc", 0.0),
-            filename="transfer_roc_curve.png",
-        )
+    if "fpr" in metrics and "tpr" in metrics and metrics["fpr"] is not None and metrics["tpr"] is not None:
+        try:
+            exp_logger.plot_roc_curve(
+                fpr=metrics["fpr"],
+                tpr=metrics["tpr"],
+                roc_auc=metrics.get("roc_auc", 0.0),
+                filename="transfer_roc_curve.png",
+            )
+        except Exception as e:
+            logger.warning(f"Could not plot ROC curve: {e}")
 
     # Output JSON Metrics
     eval_metrics_json = os.path.join(exp_logger.metrics_dir, "evaluation_metrics.json")

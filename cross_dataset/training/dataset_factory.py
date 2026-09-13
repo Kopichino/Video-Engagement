@@ -58,6 +58,8 @@ def build_dataloaders(
         num_frames = int(dataset_config.get("num_frames", 16))
         img_size = int(dataset_config.get("img_size", 224))
 
+        use_ram_cache = bool(dataset_config.get("use_ram_cache", False))
+
         train_dataset = UnifiedVideoDataset(
             manifest_path=manifest_path,
             target_dataset=target_dataset,
@@ -67,6 +69,7 @@ def build_dataloaders(
             img_size=img_size,
             label_type=label_type,
             balance_classes=balance_classes,
+            use_ram_cache=use_ram_cache,
         )
 
         val_dataset = UnifiedVideoDataset(
@@ -78,6 +81,7 @@ def build_dataloaders(
             img_size=img_size,
             label_type=label_type,
             balance_classes=False,
+            use_ram_cache=use_ram_cache,
         )
 
         test_dataset = UnifiedVideoDataset(
@@ -89,6 +93,7 @@ def build_dataloaders(
             img_size=img_size,
             label_type=label_type,
             balance_classes=False,
+            use_ram_cache=use_ram_cache,
         )
     else:
         train_dataset = UnifiedFrameDataset(

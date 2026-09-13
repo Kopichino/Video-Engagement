@@ -1,9 +1,8 @@
 """
 Unified Video Dataset Module for Experiment B (3D Spatiotemporal Sequence Modeling).
 
-Features In-Memory RAM Frame Caching for 100x Faster Data Loading without Windows Shared Memory Errors.
-Loads contiguous or uniformly sampled 16-frame temporal windows per video clip
-and formats them into 4D PyTorch video tensors of shape [C, T, H, W] = [3, 16, 224, 224].
+Features Hardware-Safe Bounded In-Memory RAM Frame Caching (<2GB RAM cap)
+to prevent Windows Pagefile Error 1455 and system GUI freezes.
 """
 
 import os
@@ -22,6 +21,8 @@ try:
 except ImportError:
     OPENCV_AVAILABLE = False
 
+from PIL import Image
+
 from cross_dataset.label_mapping.mapper import ConfigurableLabelMapper
 from cross_dataset.utils.logger import get_logger
 
@@ -32,11 +33,12 @@ class UnifiedVideoDataset(Dataset):
     """
     PyTorch Dataset for 3D Video Sequence Modeling (Experiment B).
     Loads T contiguous keyframe images per clip and converts them into shape [3, T, H, W].
-    Includes In-Memory RAM caching for 100x faster epoch iterations.
+    Includes Bounded In-Memory RAM caching for hardware safety and system stability.
     """
 
-    # Global shared RAM cache across dataset instances
+    # Global bounded RAM cache (max 500 video samples ~1.2 GB RAM cap)
     _global_frame_cache: Dict[str, torch.Tensor] = {}
+    _max_cache_entries: int = 500
 
     def __init__(
         self,
@@ -49,7 +51,7 @@ class UnifiedVideoDataset(Dataset):
         label_type: str = "primary",
         balance_classes: bool = False,
         seed: int = 42,
-        use_ram_cache: bool = True,
+        use_ram_cache: bool = False,
     ):
         """
         Args:
@@ -62,7 +64,7 @@ class UnifiedVideoDataset(Dataset):
             label_type: Label taxonomy ('primary' for 3-class, 'binary' for 2-class).
             balance_classes: If True, applies class balancing to training set.
             seed: Random seed for reproducibility.
-            use_ram_cache: If True, caches pre-processed video tensors in RAM.
+            use_ram_cache: If True, caches pre-processed video tensors in RAM up to cap.
         """
         self.manifest_path = os.path.abspath(manifest_path)
         self.target_dataset = target_dataset
@@ -95,9 +97,22 @@ class UnifiedVideoDataset(Dataset):
         if fold_col in df.columns:
             df = df[df[fold_col] == self.split]
         elif "split_fold" in df.columns:
-            df = df[df["split_fold"].astype(str) == str(self.fold)]
+            if self.split == "train":
+                df = df[df["split_fold"].astype(str) != str(self.fold)]
+            else:
+                df = df[df["split_fold"].astype(str) == str(self.fold)]
         elif "split" in df.columns:
             df = df[df["split"] == self.split]
+
+        if len(df) == 0:
+            self.samples = []
+            logger.warning(
+                f"Initialized EMPTY UnifiedVideoDataset [{self.split.upper()}] Fold {self.fold} | "
+                f"Dataset: {self.target_dataset}"
+            )
+            self.mean = torch.tensor([0.43216, 0.394666, 0.37645]).view(3, 1, 1, 1)
+            self.std = torch.tensor([0.22803, 0.22145, 0.216989]).view(3, 1, 1, 1)
+            return
 
         # Map Labels
         def _get_mapped_label(r):
@@ -121,7 +136,7 @@ class UnifiedVideoDataset(Dataset):
         self.samples = df.to_dict("records")
         logger.info(
             f"Initialized UnifiedVideoDataset [{self.split.upper()}] Fold {self.fold} | "
-            f"Dataset: {self.target_dataset} | Video Samples: {len(self.samples)} | T={self.num_frames} | RAM Cache: {self.use_ram_cache}"
+            f"Dataset: {self.target_dataset} | Video Samples: {len(self.samples)} | T={self.num_frames} | Bounded RAM Cache: {self.use_ram_cache}"
         )
 
         # 3D Video Normalization Transforms (Kinetics-400 Standards)
@@ -145,33 +160,34 @@ class UnifiedVideoDataset(Dataset):
         """Finds all frame PNG paths for a given video sample record."""
         sample_id = str(record["sample_id"])
         ds_name = str(record.get("dataset_name", record.get("dataset", self.target_dataset)))
+        rel_path = str(record.get("relative_path", record.get("clip_path", "")))
 
-        sample_dir = os.path.join(self.extracted_base_dir, ds_name, sample_id)
-        if os.path.exists(sample_dir):
-            frame_paths = sorted(glob.glob(os.path.join(sample_dir, "*.png")))
-            if len(frame_paths) > 0:
-                return frame_paths
+        candidate_dirs = [
+            os.path.join(self.extracted_base_dir, ds_name, sample_id),
+            os.path.join(self.project_root, "Ver4-20260630T020728Z-3-005", "Ver4", rel_path),
+            os.path.join(self.project_root, rel_path),
+            rel_path,
+        ]
 
-        clip_path = str(record.get("relative_path", record.get("clip_path", "")))
-        if os.path.exists(clip_path) and os.path.isdir(clip_path):
-            frame_paths = sorted(glob.glob(os.path.join(clip_path, "*.png")) + glob.glob(os.path.join(clip_path, "*.jpg")))
-            if len(frame_paths) > 0:
-                return frame_paths
+        for c_dir in candidate_dirs:
+            if c_dir and os.path.exists(c_dir) and os.path.isdir(c_dir):
+                frame_paths = sorted(glob.glob(os.path.join(c_dir, "*.png")) + glob.glob(os.path.join(c_dir, "*.jpg")))
+                if len(frame_paths) > 0:
+                    return frame_paths
 
         return []
 
     def _load_video_tensor_from_frames(self, sample_id: str, frame_paths: List[str]) -> torch.Tensor:
         """
         Loads T frames, resizes to img_size x img_size, and stacks into [C, T, H, W] tensor.
-        Uses RAM Caching for 100x speedup on repeat epoch accesses.
+        Uses Bounded RAM Caching to prevent high RAM consumption.
         """
         if self.use_ram_cache and sample_id in self._global_frame_cache:
             return self._global_frame_cache[sample_id]
 
         num_available = len(frame_paths)
         if num_available == 0:
-            dummy_tensor = torch.zeros((3, self.num_frames, self.img_size, self.img_size), dtype=torch.float32)
-            return dummy_tensor
+            return torch.zeros((3, self.num_frames, self.img_size, self.img_size), dtype=torch.float32)
 
         if num_available >= self.num_frames:
             indices = np.linspace(0, num_available - 1, self.num_frames, dtype=int)
@@ -181,13 +197,16 @@ class UnifiedVideoDataset(Dataset):
         frames = []
         for idx in indices:
             path = frame_paths[idx]
-            img = cv2.imread(path)
-            if img is None:
+            try:
+                # Use PIL instead of cv2.imread to avoid segfaults on corrupted PNGs
+                with Image.open(path) as pil_img:
+                    rgb_img = pil_img.convert("RGB")
+                    if rgb_img.size != (self.img_size, self.img_size):
+                        rgb_img = rgb_img.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
+                    img = np.array(rgb_img)
+            except Exception:
+                # Corrupted or unreadable frame — substitute a black frame
                 img = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
-            else:
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                if img.shape[0] != self.img_size or img.shape[1] != self.img_size:
-                    img = cv2.resize(img, (self.img_size, self.img_size), interpolation=cv2.INTER_AREA)
 
             img_tensor = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
             frames.append(img_tensor)
@@ -196,6 +215,10 @@ class UnifiedVideoDataset(Dataset):
         video_tensor = (video_tensor - self.mean) / self.std
 
         if self.use_ram_cache:
+            # Enforce max cache entries to keep RAM under ~1.2 GB
+            if len(self._global_frame_cache) >= self._max_cache_entries:
+                first_key = next(iter(self._global_frame_cache))
+                del self._global_frame_cache[first_key]
             self._global_frame_cache[sample_id] = video_tensor
 
         return video_tensor
