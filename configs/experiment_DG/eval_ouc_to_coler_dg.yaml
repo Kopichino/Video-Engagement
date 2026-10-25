@@ -1,0 +1,33 @@
+# Experiment DG: Zero-Shot Evaluation on COLER using Generalized Model
+experiment:
+  name: "exp_dg_eval_ouc_to_coler"
+  description: "Zero-Shot Cross-Domain Evaluation: MixStyle DG Model on COLER Test Set"
+  output_dir: "outputs/exp_dg_eval_ouc_to_coler"
+  checkpoint_to_load: "outputs/exp_dg_train_ouc_mixstyle/checkpoints/best_model.pth"
+  seed: 42
+
+dataset:
+  manifest_path: "data/manifests/unified_manifest.csv"
+  target_dataset: "COLER"
+  eval_target_dataset: "COLER"
+  label_type: "primary"
+  is_video_3d: true
+  num_frames: 16
+  img_size: 224
+  fold: 0
+  balance_classes: false
+  augment: false
+  batch_size: 8
+  num_workers: 0
+  pin_memory: false
+  use_ram_cache: false
+
+model:
+  architecture: "r2plus1d_18"
+  pretrained: false
+  num_classes: 3
+  use_mixstyle: false
+  checkpoint_path: "outputs/exp_dg_train_ouc_mixstyle/checkpoints/best_model.pth"
+
+evaluation:
+  eval_batch_size: 8

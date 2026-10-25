@@ -129,7 +129,8 @@ class Trainer:
         self.scheduler = build_scheduler(self.optimizer, self.sched_cfg, total_epochs=self.total_epochs)
 
         # Build Loss Criterion
-        self.criterion = nn.CrossEntropyLoss()
+        label_smoothing = float(self.train_cfg.get("label_smoothing", 0.0))
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
         # Build DataLoaders
         self.dataloaders = build_dataloaders(self.ds_cfg)

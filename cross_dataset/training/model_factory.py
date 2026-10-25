@@ -101,9 +101,51 @@ class ResNet50EngagementClassifier(nn.Module):
                 logger.info(f"Unfroze backbone layer block: '{name}'")
 
 
+class MixStyle(nn.Module):
+    """
+    MixStyle module for Domain Generalization (Zhou et al., ICLR 2021).
+    Mixes feature statistics (channel-wise mean and variance) of randomly paired samples
+    within a mini-batch to synthesize novel domain styles during training.
+    Supports both 5D spatiotemporal tensors [B, C, T, H, W] and 4D spatial tensors [B, C, H, W].
+    """
+
+    def __init__(self, p: float = 0.5, alpha: float = 0.3, eps: float = 1e-6):
+        super().__init__()
+        self.p = p
+        self.alpha = alpha
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not self.training:
+            return x
+
+        if torch.rand(1).item() > self.p:
+            return x
+
+        B = x.size(0)
+        if B <= 1:
+            return x
+
+        reduction_dims = list(range(2, x.dim()))
+        mu = x.mean(dim=reduction_dims, keepdim=True)
+        var = x.var(dim=reduction_dims, keepdim=True, unbiased=False)
+        sig = (var + self.eps).sqrt()
+
+        x_norm = (x - mu) / sig
+
+        perm = torch.randperm(B)
+        lmda = torch.distributions.Beta(self.alpha, self.alpha).sample().to(x.device)
+
+        mu_mix = mu * lmda + mu[perm] * (1.0 - lmda)
+        sig_mix = sig * lmda + sig[perm] * (1.0 - lmda)
+
+        return x_norm * sig_mix + mu_mix
+
+
 class R2Plus1DEngagementClassifier(nn.Module):
     """
     R(2+1)D-18 3D Spatiotemporal Video Backbone for 16-Frame Sequence Engagement Recognition (Experiment B).
+    Optionally supports MixStyle domain generalization.
     """
 
     def __init__(
@@ -112,6 +154,9 @@ class R2Plus1DEngagementClassifier(nn.Module):
         pretrained: bool = True,
         dropout_rate: float = 0.5,
         hidden_dim: Optional[int] = 512,
+        use_mixstyle: bool = False,
+        mixstyle_p: float = 0.5,
+        mixstyle_alpha: float = 0.3,
     ):
         super().__init__()
         if not TORCHVISION_VIDEO_AVAILABLE:
@@ -120,6 +165,11 @@ class R2Plus1DEngagementClassifier(nn.Module):
         self.num_classes = num_classes
         self.pretrained = pretrained
         self.dropout_rate = dropout_rate
+        self.use_mixstyle = use_mixstyle
+
+        if self.use_mixstyle:
+            self.mixstyle = MixStyle(p=mixstyle_p, alpha=mixstyle_alpha)
+            logger.info(f"MixStyle enabled in R(2+1)D-18 (p={mixstyle_p}, alpha={mixstyle_alpha})")
 
         if pretrained:
             weights = R2Plus1D_18_Weights.DEFAULT
@@ -150,7 +200,19 @@ class R2Plus1DEngagementClassifier(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Input shape: [B, C, T, H, W]
-        features = self.backbone(x)
+        if self.use_mixstyle:
+            x = self.backbone.stem(x)
+            x = self.backbone.layer1(x)
+            x = self.mixstyle(x)
+            x = self.backbone.layer2(x)
+            x = self.mixstyle(x)
+            x = self.backbone.layer3(x)
+            x = self.backbone.layer4(x)
+            x = self.backbone.avgpool(x)
+            features = torch.flatten(x, 1)
+        else:
+            features = self.backbone(x)
+
         logits = self.classifier(features)
         return logits
 
@@ -188,6 +250,9 @@ def build_model(model_config: Dict[str, Any]) -> nn.Module:
             pretrained=pretrained,
             dropout_rate=dropout_rate,
             hidden_dim=hidden_dim,
+            use_mixstyle=bool(model_config.get("use_mixstyle", False)),
+            mixstyle_p=float(model_config.get("mixstyle_p", 0.5)),
+            mixstyle_alpha=float(model_config.get("mixstyle_alpha", 0.3)),
         )
     else:
         logger.info(f"Building 2D Spatial Backbone: '{arch}'")

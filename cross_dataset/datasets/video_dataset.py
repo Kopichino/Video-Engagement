@@ -8,6 +8,7 @@ to prevent Windows Pagefile Error 1455 and system GUI freezes.
 import os
 import glob
 import random
+import json
 from typing import List, Dict, Any, Tuple, Optional
 
 import numpy as np
@@ -52,6 +53,8 @@ class UnifiedVideoDataset(Dataset):
         balance_classes: bool = False,
         seed: int = 42,
         use_ram_cache: bool = False,
+        augment: bool = False,
+        spatial_norm: bool = False,
     ):
         """
         Args:
@@ -65,6 +68,8 @@ class UnifiedVideoDataset(Dataset):
             balance_classes: If True, applies class balancing to training set.
             seed: Random seed for reproducibility.
             use_ram_cache: If True, caches pre-processed video tensors in RAM up to cap.
+            augment: If True, applies photometric domain randomization augmentations to video clips.
+            spatial_norm: If True, crops individual student bounding boxes from OUC-CGE.
         """
         self.manifest_path = os.path.abspath(manifest_path)
         self.target_dataset = target_dataset
@@ -76,10 +81,23 @@ class UnifiedVideoDataset(Dataset):
         self.balance_classes = balance_classes
         self.seed = seed
         self.use_ram_cache = use_ram_cache
+        self.augment = bool(augment and (split == "train"))
+        self.spatial_norm = spatial_norm
 
         self.label_mapper = ConfigurableLabelMapper()
         self.project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.extracted_base_dir = os.path.join(self.project_root, "data", "extracted_frames")
+
+        self.bbox_dict = {}
+        if self.spatial_norm:
+            bbox_path = os.path.join(self.project_root, "data", "manifests", "ouc_student_bboxes.json")
+            if os.path.exists(bbox_path):
+                try:
+                    with open(bbox_path, "r", encoding="utf-8") as bf:
+                        self.bbox_dict = json.load(bf)
+                    logger.info(f"Spatial Normalization: loaded {len(self.bbox_dict)} student bounding boxes.")
+                except Exception as be:
+                    logger.warning(f"Could not load student bounding boxes: {be}")
 
         # Load Manifest
         if not os.path.exists(self.manifest_path):
@@ -201,6 +219,16 @@ class UnifiedVideoDataset(Dataset):
                 # Use PIL instead of cv2.imread to avoid segfaults on corrupted PNGs
                 with Image.open(path) as pil_img:
                     rgb_img = pil_img.convert("RGB")
+
+                    # Spatial Normalization: Crop detected student bounding box
+                    if self.spatial_norm and sample_id in self.bbox_dict:
+                        nb = self.bbox_dict[sample_id]  # [x1, y1, x2, y2] normalized
+                        ow, oh = rgb_img.size
+                        cx1, cy1 = int(nb[0] * ow), int(nb[1] * oh)
+                        cx2, cy2 = int(nb[2] * ow), int(nb[3] * oh)
+                        if cx2 > cx1 + 10 and cy2 > cy1 + 10:
+                            rgb_img = rgb_img.crop((cx1, cy1, cx2, cy2))
+
                     if rgb_img.size != (self.img_size, self.img_size):
                         rgb_img = rgb_img.resize((self.img_size, self.img_size), Image.Resampling.BILINEAR)
                     img = np.array(rgb_img)
@@ -212,6 +240,31 @@ class UnifiedVideoDataset(Dataset):
             frames.append(img_tensor)
 
         video_tensor = torch.stack(frames, dim=0).permute(1, 0, 2, 3)
+
+        # Domain Randomization Augmentations (Training Only)
+        if self.augment:
+            # 1. Random Horizontal Flip (p=0.5)
+            if torch.rand(1).item() < 0.5:
+                video_tensor = torch.flip(video_tensor, dims=[3])
+
+            # 2. Photometric Color Jitter (Brightness & Contrast)
+            brightness = 0.8 + 0.4 * torch.rand(1).item()
+            contrast = 0.8 + 0.4 * torch.rand(1).item()
+            video_tensor = torch.clamp((video_tensor * brightness - 0.5) * contrast + 0.5, 0.0, 1.0)
+
+            # 3. Random Grayscale (p=0.2) to destroy reliance on background color
+            if torch.rand(1).item() < 0.2:
+                gray = 0.2989 * video_tensor[0:1] + 0.5870 * video_tensor[1:2] + 0.1140 * video_tensor[2:3]
+                video_tensor = gray.repeat(3, 1, 1, 1)
+
+            # 4. Random Spatial Erasing / Cutout (p=0.3)
+            if torch.rand(1).item() < 0.3:
+                h_erase = int(self.img_size * (0.15 + 0.15 * torch.rand(1).item()))
+                w_erase = int(self.img_size * (0.15 + 0.15 * torch.rand(1).item()))
+                top = torch.randint(0, self.img_size - h_erase + 1, (1,)).item()
+                left = torch.randint(0, self.img_size - w_erase + 1, (1,)).item()
+                video_tensor[:, :, top:top + h_erase, left:left + w_erase] = 0.0
+
         video_tensor = (video_tensor - self.mean) / self.std
 
         if self.use_ram_cache:
